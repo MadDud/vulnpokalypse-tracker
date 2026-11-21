@@ -297,20 +297,28 @@ const VulnDB = (() => {
         const cursor = event.target.result;
         if (!cursor) return;
         const record = cursor.value;
-        const extractedCves = extractCVEsFromRecord(record);
-        const mergedLabels = normalizeLabels([...(record.labels || []), ...extractedCves]);
+        const removedSet = new Set(
+          (Array.isArray(record.removedLabels) ? record.removedLabels : []).map((l) =>
+            String(l).toLowerCase()
+          )
+        );
+        const missingLabels = !Array.isArray(record.labels);
         const missingLog = !Array.isArray(record.activityLog) || record.activityLog.length === 0;
         const needsUpdate =
-          !Array.isArray(record.labels) ||
-          mergedLabels.length !== record.labels.length ||
+          missingLabels ||
           !Array.isArray(record.linkedArticles) ||
           !Array.isArray(record.linkedTo) ||
           typeof record.linked !== "boolean" ||
           missingLog;
 
         if (needsUpdate) {
-          record.labels = mergedLabels;
-          record.cves = normalizeLabels([...(record.cves || []), ...extractedCves]);
+          if (missingLabels) {
+            const extractedCves = extractCVEsFromRecord(record).filter(
+              (c) => !removedSet.has(c.toLowerCase())
+            );
+            record.labels = normalizeLabels(extractedCves);
+            record.cves = normalizeLabels(extractedCves);
+          }
           record.linkedArticles = Array.isArray(record.linkedArticles) ? record.linkedArticles : [];
           record.linkedTo = Array.isArray(record.linkedTo) ? record.linkedTo : [];
           record.linked = Boolean(record.linked);
@@ -492,15 +500,33 @@ const VulnDB = (() => {
           const prev = allMap.get(item.id);
 
           if (prev) {
-            // Preserve user state, custom title, notes, unseen link notices, and merge labels without duplicates
-            const mergedLabels = normalizeLabels([...(prev.labels || []), ...itemLabels]);
+            // Preserve user state, custom title, notes, unseen link notices, removed labels, and merge labels without duplicates
+            const removedSet = new Set(
+              (Array.isArray(prev.removedLabels) ? prev.removedLabels : []).map((l) =>
+                String(l).toLowerCase()
+              )
+            );
+            const filteredIncomingLabels = itemLabels.filter(
+              (lbl) => !removedSet.has(lbl.toLowerCase())
+            );
+            const mergedLabels = normalizeLabels([
+              ...(prev.labels || []),
+              ...filteredIncomingLabels,
+            ]);
+            const filteredCves = normalizeLabels([
+              ...(prev.cves || []),
+              ...(item.cves || []),
+              ...extractCVEsFromRecord(item),
+            ]).filter((c) => !removedSet.has(c.toLowerCase()));
+
             const updatedRecord = {
               ...item,
               title: prev.customTitle ? prev.title : item.title,
               customTitle: Boolean(prev.customTitle),
               notes: typeof prev.notes === "string" ? prev.notes : "",
               labels: mergedLabels,
-              cves: normalizeLabels([...(prev.cves || []), ...(item.cves || []), ...extractCVEsFromRecord(item)]),
+              removedLabels: Array.isArray(prev.removedLabels) ? prev.removedLabels : [],
+              cves: filteredCves,
               read: Boolean(prev.read),
               fetchedAt: prev.fetchedAt || Date.now(),
               focused: Boolean(prev.focused),
@@ -1180,6 +1206,14 @@ const VulnDB = (() => {
           const addedLabel = next[next.length - 1];
           const addedKey = addedLabel.toLowerCase();
           record.labels = next;
+          if (Array.isArray(record.removedLabels)) {
+            record.removedLabels = record.removedLabels.filter(
+              (l) => String(l).toLowerCase() !== addedKey
+            );
+          }
+          if (/^CVE-\d{4}-\d{4,7}$/i.test(addedLabel)) {
+            record.cves = normalizeLabels([...(record.cves || []), addedLabel.toUpperCase()]);
+          }
           appendArticleLog(record, "LABEL_ADDED", `Added label "${addedLabel}".`, "info");
 
           if (record.focused) {
@@ -1348,36 +1382,165 @@ const VulnDB = (() => {
     const db = await open();
     const targetKey = String(labelToRemove || "").trim().toLowerCase();
     let updatedLabels = [];
+    let removed = false;
+    let wasFocused = false;
+    let articleTitle = "";
+    const unlinkedArticles = [];
+    const unlinkedPlugins = [];
+    let removedKevCves = [];
 
     await new Promise((resolve, reject) => {
       const tx = db.transaction(["articles", "enrichmentItems"], "readwrite");
       const store = tx.objectStore("articles");
       const enrichStore = tx.objectStore("enrichmentItems");
 
-      let record = null;
+      let allArticles = null;
       let allEnrichment = null;
 
       const process = () => {
-        if (record === null || allEnrichment === null) return;
+        if (allArticles === null || allEnrichment === null) return;
+        const allById = new Map(allArticles.map((a) => [a.id, a]));
+        const record = allById.get(articleId);
         if (!record) return;
-        updatedLabels = normalizeLabels(record.labels || []).filter(
+
+        articleTitle = record.title || "";
+        wasFocused = Boolean(record.focused);
+
+        const prevLabels = normalizeLabels(record.labels || []);
+        updatedLabels = prevLabels.filter((lbl) => lbl.toLowerCase() !== targetKey);
+        removed = updatedLabels.length < prevLabels.length;
+
+        if (!removed) return;
+
+        record.labels = updatedLabels;
+        record.cves = normalizeLabels(record.cves || []).filter(
           (lbl) => lbl.toLowerCase() !== targetKey
         );
-        if (updatedLabels.length < (record.labels || []).length) {
-          appendArticleLog(record, "LABEL_REMOVED", `Removed label "${labelToRemove}".`, "info");
+        const prevRemoved = Array.isArray(record.removedLabels) ? record.removedLabels : [];
+        if (!prevRemoved.some((l) => String(l).toLowerCase() === targetKey)) {
+          record.removedLabels = [...prevRemoved, labelToRemove];
         }
-        record.labels = updatedLabels;
+
+        appendArticleLog(record, "LABEL_REMOVED", `Removed label "${labelToRemove}".`, "info");
+
         if (record.focused) {
-          record.nessusPlugins = computeMatchingNessusPlugins(record, allEnrichment);
+          // Process linked articles:
+          // - If removed label is the ONLY label on the linked article card -> unlink it.
+          // - If linked article card has more than one label -> remove just this label from its card.
+          const currentLinked = Array.isArray(record.linkedArticles)
+            ? record.linkedArticles
+            : [];
+          const nextLinked = [];
+          const unlinkedIdSet = new Set();
+
+          for (const entry of currentLinked) {
+            const matched = Array.isArray(entry.matchedLabels) ? entry.matchedLabels : [];
+            const hasTarget = matched.some((lbl) => lbl.toLowerCase() === targetKey);
+
+            if (!hasTarget) {
+              nextLinked.push(entry);
+              continue;
+            }
+
+            const remainingLabels = matched.filter((lbl) => lbl.toLowerCase() !== targetKey);
+            if (remainingLabels.length === 0) {
+              // Only label listed on the linked article -> unlink completely
+              unlinkedIdSet.add(entry.articleId);
+              const other = allById.get(entry.articleId);
+              const otherTitle = other ? other.title : entry.title || "(Untitled article)";
+
+              if (other) {
+                other.linkedTo = (Array.isArray(other.linkedTo) ? other.linkedTo : []).filter(
+                  (fid) => fid !== record.id
+                );
+                if (other.linkedTo.length === 0) {
+                  other.linked = false;
+                }
+                appendArticleLog(
+                  other,
+                  "UNLINKED",
+                  [
+                    { text: "Unlinked from focused article " },
+                    { text: record.title, articleId: record.id },
+                    { text: ` after label "${labelToRemove}" was removed.` },
+                  ],
+                  "info"
+                );
+                store.put(other);
+              }
+
+              unlinkedArticles.push({
+                articleId: entry.articleId,
+                title: otherTitle,
+              });
+
+              appendArticleLog(
+                record,
+                "UNLINKED",
+                [
+                  { text: "Unlinked article " },
+                  { text: otherTitle, articleId: entry.articleId },
+                  { text: ` after removing label "${labelToRemove}".` },
+                ],
+                "info"
+              );
+            } else {
+              // Has more than one label -> keep linked, drop removed label from its card
+              nextLinked.push({
+                ...entry,
+                matchedLabels: remainingLabels,
+              });
+            }
+          }
+
+          record.linkedArticles = nextLinked;
+          if (unlinkedIdSet.size > 0 && Array.isArray(record.newLinks)) {
+            record.newLinks = record.newLinks.filter(
+              (notice) => !unlinkedIdSet.has(notice.articleId)
+            );
+          }
+
+          // Re-sync Nessus plugins & KEV items with updated labels
+          const prevPlugins = Array.isArray(record.nessusPlugins) ? record.nessusPlugins : [];
+          const nextPlugins = computeMatchingNessusPlugins(record, allEnrichment);
+          const nextPluginKeys = new Set(
+            nextPlugins.map((p) => (p.pluginId ? `plugin:${p.pluginId}` : `item:${p.itemId}`))
+          );
+          for (const prevP of prevPlugins) {
+            const key = prevP.pluginId ? `plugin:${prevP.pluginId}` : `item:${prevP.itemId}`;
+            if (!nextPluginKeys.has(key)) {
+              unlinkedPlugins.push(prevP);
+              appendArticleLog(
+                record,
+                "NESSUS_UNLINKED",
+                `Unlinked Nessus plugin "${prevP.title}" after removing label "${labelToRemove}".`,
+                "info"
+              );
+            }
+          }
+          record.nessusPlugins = nextPlugins;
+
+          const prevKevCves = Array.isArray(record.kevCves) ? record.kevCves : [];
           const { kevCves, kevItems } = computeMatchingKev(record, allEnrichment);
+          const nextKevSet = new Set(kevCves.map((c) => c.toUpperCase()));
+          removedKevCves = prevKevCves.filter((c) => !nextKevSet.has(c.toUpperCase()));
+          if (removedKevCves.length > 0) {
+            appendArticleLog(
+              record,
+              "KEV_UNLINKED",
+              `Unlinked CISA KEV entry for ${removedKevCves.join(", ")} after removing label "${labelToRemove}".`,
+              "info"
+            );
+          }
           record.kevCves = kevCves;
           record.kevItems = kevItems;
         }
+
         store.put(record);
       };
 
-      store.get(articleId).onsuccess = (e) => {
-        record = e.target.result || false;
+      store.getAll().onsuccess = (e) => {
+        allArticles = e.target.result || [];
         process();
       };
       enrichStore.getAll().onsuccess = (e) => {
@@ -1389,7 +1552,15 @@ const VulnDB = (() => {
       tx.onerror = () => reject(tx.error);
     });
 
-    return updatedLabels;
+    return {
+      removed,
+      labels: updatedLabels,
+      wasFocused,
+      articleTitle,
+      unlinkedArticles,
+      unlinkedPlugins,
+      removedKevCves,
+    };
   }
 
   async function setArticleStarred(articleId, isStarred) {

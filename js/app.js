@@ -2194,9 +2194,55 @@
       const removeBtn = e.target.closest("button[data-remove-label]");
       if (!removeBtn || !state.selectedArticleId) return;
       const labelToRemove = removeBtn.dataset.removeLabel;
-      await VulnDB.removeArticleLabel(state.selectedArticleId, labelToRemove);
+      const focusId = state.selectedArticleId;
+
+      const result = await VulnDB.removeArticleLabel(focusId, labelToRemove);
+      if (!result || !result.removed) return;
+
+      // If currently viewing an article that was just unlinked, switch back to main article
+      if (
+        state.viewingLinkedArticleId &&
+        (result.unlinkedArticles || []).some((u) => u.articleId === state.viewingLinkedArticleId)
+      ) {
+        state.viewingLinkedArticleId = null;
+        state.viewingLinkedKind = null;
+      }
+
+      if (result.wasFocused) {
+        await VulnDB.addEvent({
+          type: "LABEL_REMOVED",
+          level: "info",
+          parts: [
+            { text: `Removed label "${labelToRemove}" from focused article ` },
+            { text: result.articleTitle, articleId: focusId },
+            { text: "." },
+          ],
+        });
+
+        for (const unlinked of result.unlinkedArticles || []) {
+          await VulnDB.addEvent({
+            type: "UNLINKED",
+            level: "info",
+            parts: [
+              { text: "Unlinked " },
+              { text: unlinked.title, articleId: unlinked.articleId },
+              { text: " from focused article " },
+              { text: result.articleTitle, articleId: focusId },
+              { text: ` after removing label "${labelToRemove}".` },
+            ],
+          });
+        }
+      }
+
       await reloadFromDB();
       renderAll();
+
+      const unlinkedCount = (result.unlinkedArticles || []).length;
+      const unlinkMsg =
+        unlinkedCount > 0
+          ? ` Unlinked ${unlinkedCount} article${unlinkedCount === 1 ? "" : "s"}.`
+          : "";
+      showToast(`Removed label: ${labelToRemove}.${unlinkMsg}`);
     });
 
     // Settings open / close / tabs
