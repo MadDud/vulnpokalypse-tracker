@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vulnpokalypse Tracker</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Left Column: Full Height, 30% Width -->
+    <aside class="feed-sidebar" aria-label="Latest vulnerability articles">
+      <div class="sidebar-header">
+        <div class="sidebar-title-row">
+          <div class="brand-text">
+            <h1>Vulnpokalypse</h1>
+          </div>
+          <div class="sidebar-header-tools">
+            <button
+              type="button"
+              class="icon-btn status-dot-btn"
+              id="btn-subscription-status"
+              title="Subscription Status"
+              aria-label="Subscription Status"
+              aria-haspopup="dialog"
+              aria-controls="status-window"
+            >
+              <span class="sub-status-dot ok" id="top-sub-status-dot"></span>
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              id="btn-open-settings"
+              title="Settings"
+              aria-label="Settings"
+              aria-haspopup="dialog"
+              aria-controls="settings-window"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-controls">
+          <div class="search-wrap">
+            <input
+              type="search"
+              id="article-search"
+              placeholder="Filter articles, CVEs, sources…"
+              autocomplete="off"
+              aria-label="Filter articles"
+            />
+          </div>
+          <div class="filter-bar">
+            <button type="button" class="filter-chip" data-filter="all">All</button>
+            <button type="button" class="filter-chip active" data-filter="unread">Unread <span id="unread-badge" class="chip-count">0</span></button>
+            <button type="button" class="filter-chip filter-chip-exploited" data-filter="exploited">Exploited <span id="exploited-badge" class="chip-count">0</span></button>
+            <select id="feed-filter-select" class="feed-filter-select" aria-label="Filter by subscription">
+              <option value="all">All feeds</option>
+            </select>
+          </div>
+          <div class="sidebar-actions-row">
+            <button type="button" class="btn btn-sm btn-subtle btn-mark-read-full" id="btn-mark-all-read" title="Mark all currently displayed articles as read">
+              Mark all read <span id="mark-all-read-count" class="chip-count">0</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-sync" id="btn-refresh" title="Click to sync feeds now" aria-label="Sync feeds now">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <polyline points="21 3 21 9 15 9" />
+              </svg>
+              <span id="sync-btn-label">Sync now</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="article-list-container" id="article-list" role="list">
+        <div class="empty-state">
+          <p>Loading articles from HTML5 database…</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right Column: 70% Width — Event Log & Focus List Workspace -->
+    <main class="main-workspace">
+      <section class="event-log-bar" aria-label="Recent event logs">
+        <div class="event-log-header">
+          <div class="event-log-title-group">
+            <span class="event-log-title">Activity Log</span>
+            <span class="chip-count log-unread-badge" id="event-log-unread" title="Unread log events">0</span>
+          </div>
+          <div class="event-log-header-actions">
+            <button type="button" class="btn-log-history hidden" id="btn-mark-logs-read" title="Mark all log events as read">
+              Mark read
+            </button>
+            <button type="button" class="btn-log-history" id="btn-open-full-logs">
+              All events (<span id="event-log-total">0</span>)
+            </button>
+          </div>
+        </div>
+        <div class="event-log-list" id="event-log-list">
+          <div class="event-log-empty">No events recorded yet.</div>
+        </div>
+      </section>
+
+      <section class="focus-workspace" id="focus-workspace">
+        <div class="focus-grid" id="focus-grid" role="list">
+          <!-- Focus cards rendered dynamically (2–3 per row depending on screen width) -->
+        </div>
+
+        <div class="focus-empty-state hidden" id="focus-empty-state">
+          <div class="terminal-badge">VULNPOKALYPSE // FOCUS BOARD</div>
+          <h3>No articles in your Focus List yet</h3>
+          <p>Use the <strong>Focus</strong> button on articles in the left panel to stage priority vulnerabilities and advisories here for deeper triage.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Full Event Log Floating Window -->
+  <div class="modal-backdrop hidden" id="logs-backdrop" aria-hidden="true"></div>
+  <div
+    class="floating-window logs-floating-window hidden"
+    id="logs-window"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="logs-window-title"
+  >
+    <div class="window-titlebar">
+      <div class="window-title-group">
+        <span class="window-indicator" aria-hidden="true"></span>
+        <h2 id="logs-window-title">Activity Log History</h2>
+      </div>
+      <div class="window-title-actions">
+        <button type="button" class="btn btn-sm btn-danger" id="btn-clear-logs">Clear Logs</button>
+        <button type="button" class="icon-btn window-close-btn" id="btn-close-logs" aria-label="Close activity log">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="window-body">
+      <div class="event-log-list full-log-list" id="full-logs-list"></div>
+    </div>
+  </div>
+
+  <!-- Subscription Status Floating Window -->
+  <div class="modal-backdrop hidden" id="status-backdrop" aria-hidden="true"></div>
+  <div
+    class="floating-window status-floating-window hidden"
+    id="status-window"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="status-window-title"
+  >
+    <div class="window-titlebar">
+      <div class="window-title-group">
+        <span class="sub-status-dot ok" id="modal-sub-status-dot" aria-hidden="true"></span>
+        <h2 id="status-window-title">Subscription Status</h2>
+      </div>
+      <button type="button" class="icon-btn window-close-btn" id="btn-close-status" aria-label="Close subscription status">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="window-body">
+      <div class="feed-health-list" id="feed-health-list"></div>
+    </div>
+  </div>
+
+  <!-- Article Details Floating Page (Almost Full Browser Height) -->
+  <div class="modal-backdrop hidden" id="details-backdrop" aria-hidden="true"></div>
+  <div
+    class="details-floating-page hidden"
+    id="details-window"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="details-title"
+  >
+    <div class="details-header">
+      <div class="details-header-left">
+        <span class="window-indicator" aria-hidden="true"></span>
+        <span class="details-header-label">Article Details</span>
+      </div>
+      <div class="details-header-actions">
+        <button type="button" class="btn btn-sm btn-primary" id="details-toggle-focus">Focus</button>
+        <button type="button" class="btn btn-sm btn-subtle" id="details-toggle-read">Mark as unread</button>
+        <button
+          type="button"
+          class="btn btn-sm btn-subtle"
+          id="btn-article-activity-log"
+          aria-haspopup="dialog"
+          aria-controls="article-logs-window"
+        >
+          Activity Log (<span id="details-log-count">0</span>)
+        </button>
+        <button type="button" class="icon-btn window-close-btn" id="btn-close-details" aria-label="Close details">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="details-split-body">
+      <!-- Left Column: Article Content -->
+      <article class="details-article-pane" id="details-article-pane">
+        <div class="linked-viewer-banner hidden" id="linked-viewer-banner">
+          <div class="linked-viewer-banner-info">
+            <span class="linked-badge">Linked Article</span>
+            <span id="linked-viewer-source"></span>
+          </div>
+          <button type="button" class="btn btn-sm btn-subtle" id="btn-back-to-main-article">
+            ← Back to main article
+          </button>
+        </div>
+
+        <div class="details-title-row" id="details-title-display">
+          <button
+            type="button"
+            class="star-btn star-btn-details"
+            id="btn-details-star"
+            title="Star article"
+            aria-label="Star article"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </button>
+          <span
+            class="kev-alert-icon kev-alert-details hidden"
+            id="details-kev-icon"
+            title="Known Exploited Vulnerability (KEV)"
+            aria-label="Known Exploited Vulnerability (KEV)"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="7.5" x2="12" y2="13"></line>
+              <circle cx="12" cy="16.5" r="0.8" fill="currentColor"></circle>
+            </svg>
+          </span>
+          <h2 class="reader-title" id="details-title"></h2>
+          <button type="button" class="icon-btn btn-edit-title" id="btn-edit-title" title="Edit article title" aria-label="Edit article title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+          </button>
+        </div>
+
+        <form class="edit-title-form hidden" id="edit-title-form">
+          <input type="text" id="input-edit-title" required aria-label="Article title" />
+          <button type="submit" class="btn btn-sm btn-primary">Save</button>
+          <button type="button" class="btn btn-sm btn-subtle" id="btn-cancel-edit-title">Cancel</button>
+        </form>
+
+        <!-- Article Labels (between title and custom notes) -->
+        <div class="details-labels-bar" id="details-labels-bar" aria-label="Article labels"></div>
+
+        <!-- Custom Notes (just below article labels) -->
+        <section class="custom-notes-box" id="custom-notes-box" aria-label="Custom notes">
+          <div class="notes-view-mode" id="notes-view-mode">
+            <div class="notes-header-row">
+              <span class="notes-label">Notes</span>
+              <button type="button" class="btn btn-sm btn-subtle" id="btn-edit-notes">Edit</button>
+            </div>
+            <div class="notes-content" id="notes-content"></div>
+          </div>
+          <div class="notes-empty-mode" id="notes-empty-mode">
+            <button type="button" class="btn btn-sm btn-subtle" id="btn-add-notes">+ Add custom notes</button>
+          </div>
+          <form class="notes-edit-form hidden" id="notes-edit-form">
+            <textarea
+              id="textarea-notes"
+              rows="4"
+              placeholder="Write notes here… URLs like https://example.com become clickable links."
+            ></textarea>
+            <div class="notes-edit-actions">
+              <span class="field-hint">Tip: paste URLs or [text](https://…) for clickable links.</span>
+              <div class="notes-edit-buttons">
+                <button type="submit" class="btn btn-sm btn-primary">Save Notes</button>
+                <button type="button" class="btn btn-sm btn-subtle" id="btn-cancel-notes">Cancel</button>
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <div class="reader-body" id="details-body"></div>
+      </article>
+
+      <!-- Right Column: Table + Linked Articles -->
+      <aside class="details-metadata-pane" aria-label="Article details and linked articles">
+        <table class="metadata-table">
+          <tbody id="details-metadata-tbody">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+
+        <section class="linked-articles-section" id="details-linked-section">
+          <div class="metadata-pane-header linked-header-row">
+            <h3>Linked Articles</h3>
+            <span class="chip-count" id="details-linked-count">0</span>
+          </div>
+          <div class="linked-filter-bar" id="linked-filter-bar" role="group" aria-label="Filter linked articles">
+            <button type="button" class="filter-chip active" data-linked-filter="all">All</button>
+            <button type="button" class="filter-chip" data-linked-filter="articles">Articles</button>
+            <button type="button" class="filter-chip" data-linked-filter="nessus">Nessus</button>
+            <button type="button" class="filter-chip filter-chip-exploited" data-linked-filter="kev">KEV</button>
+          </div>
+          <div class="linked-articles-list" id="details-linked-list">
+            <!-- Populated dynamically -->
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Per-Article Activity Log Floating Window -->
+  <div class="modal-backdrop article-logs-backdrop hidden" id="article-logs-backdrop" aria-hidden="true"></div>
+  <div
+    class="floating-window logs-floating-window article-logs-window hidden"
+    id="article-logs-window"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="article-logs-window-title"
+  >
+    <div class="window-titlebar">
+      <div class="window-title-group">
+        <span class="window-indicator" aria-hidden="true"></span>
+        <h2 id="article-logs-window-title">Article Activity Log</h2>
+      </div>
+      <button type="button" class="icon-btn window-close-btn" id="btn-close-article-logs" aria-label="Close article activity log">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="window-body">
+      <div class="event-log-list full-log-list" id="article-logs-list"></div>
+    </div>
+  </div>
+
+  <!-- Small Custom Label Popup -->
+  <div class="label-popup hidden" id="label-popup" role="dialog" aria-label="Add custom label">
+    <form class="label-popup-form" id="add-label-form">
+      <label for="input-add-label" class="label-popup-title">Add Custom Label</label>
+      <input
+        type="text"
+        id="input-add-label"
+        placeholder="e.g. CVE-2026-1234 or tag…"
+        autocomplete="off"
+        required
+      />
+      <div class="label-popup-actions">
+        <button type="submit" class="btn btn-sm btn-primary">Add</button>
+        <button type="button" class="btn btn-sm btn-subtle" id="btn-cancel-label-popup">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Floating Settings Window -->
+  <div class="modal-backdrop hidden" id="settings-backdrop" aria-hidden="true"></div>
+  <div
+    class="floating-window hidden"
+    id="settings-window"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="settings-window-title"
+  >
+    <div class="window-titlebar" id="settings-titlebar">
+      <div class="window-title-group">
+        <span class="window-indicator" aria-hidden="true"></span>
+        <h2 id="settings-window-title">Settings</h2>
+      </div>
+      <button type="button" class="icon-btn window-close-btn" id="btn-close-settings" aria-label="Close settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <div class="window-tabs" role="tablist" aria-label="Settings sections">
+      <button
+        type="button"
+        class="tab-btn active"
+        role="tab"
+        id="tab-btn-subscriptions"
+        aria-selected="true"
+        aria-controls="tab-panel-subscriptions"
+        data-tab="subscriptions"
+      >
+        RSS Subscriptions
+      </button>
+      <button
+        type="button"
+        class="tab-btn"
+        role="tab"
+        id="tab-btn-sync"
+        aria-selected="false"
+        aria-controls="tab-panel-sync"
+        data-tab="sync"
+      >
+        Sync &amp; Network
+      </button>
+      <button
+        type="button"
+        class="tab-btn"
+        role="tab"
+        id="tab-btn-database"
+        aria-selected="false"
+        aria-controls="tab-panel-database"
+        data-tab="database"
+      >
+        HTML5 Database
+      </button>
+    </div>
+
+    <div class="window-body">
+      <!-- Tab 1: RSS Subscriptions -->
+      <section class="tab-panel active" id="tab-panel-subscriptions" role="tabpanel" aria-labelledby="tab-btn-subscriptions">
+        <div class="panel-header-row">
+          <div>
+            <h3>RSS Subscriptions</h3>
+            <p class="panel-desc">Manage vulnerability and threat intelligence feeds. Disabled feeds remain stored but are paused from polling.</p>
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-toggle-add-feed">+ Add Feed</button>
+        </div>
+
+        <form class="feed-form hidden" id="add-feed-form">
+          <div class="form-row">
+            <label for="new-feed-name">Feed Name</label>
+            <input type="text" id="new-feed-name" placeholder="e.g. CISA Advisories or Tenable Nessus" required />
+          </div>
+          <div class="form-row">
+            <label for="new-feed-url">RSS / Atom URL</label>
+            <input type="url" id="new-feed-url" placeholder="https://example.com/feed.xml" required />
+          </div>
+          <div class="form-row">
+            <label for="new-feed-type">Feed Type</label>
+            <select id="new-feed-type">
+              <option value="standard">Standard Feed (shown in left feed list)</option>
+              <option value="enrichment:nessus">Nessus Feed (Tenable Nessus Plugins)</option>
+              <option value="enrichment:kev">KEV Feed (CISA Known Exploited Vulnerabilities)</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Subscription</button>
+            <button type="button" class="btn btn-subtle" id="btn-cancel-add-feed">Cancel</button>
+          </div>
+        </form>
+
+        <div class="subscriptions-list" id="subscriptions-list">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+
+      <!-- Tab 2: Sync & Network -->
+      <section class="tab-panel" id="tab-panel-sync" role="tabpanel" aria-labelledby="tab-btn-sync">
+        <h3>Polling &amp; Feed Fetching</h3>
+        <p class="panel-desc">Configure how often feeds are automatically pulled and how cross-origin (CORS) requests are handled.</p>
+
+        <form id="sync-settings-form" class="settings-form">
+          <div class="form-row">
+            <label for="setting-poll-interval">Auto-pull interval</label>
+            <select id="setting-poll-interval">
+              <option value="5">Every 5 minutes</option>
+              <option value="10">Every 10 minutes</option>
+              <option value="15">Every 15 minutes</option>
+              <option value="30">Every 30 minutes</option>
+              <option value="60">Every 60 minutes</option>
+              <option value="0">Manual only</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label for="setting-cors-mode">CORS Fetch Mode</label>
+            <select id="setting-cors-mode">
+              <option value="auto">Auto (Direct first, fallback to public CORS proxies)</option>
+              <option value="proxy-first">Public CORS proxies first</option>
+              <option value="custom">Custom CORS proxy URL</option>
+              <option value="direct">Direct fetch only (requires CORS-enabled feed or extension)</option>
+            </select>
+            <span class="field-hint">Browsers block direct cross-origin RSS reads unless the remote host sends CORS headers.</span>
+          </div>
+
+          <div class="form-row hidden" id="custom-proxy-row">
+            <label for="setting-custom-proxy">Custom Proxy Template</label>
+            <input
+              type="url"
+              id="setting-custom-proxy"
+              placeholder="https://your-proxy.example/?url={url}"
+            />
+            <span class="field-hint">Use <code>{url}</code> where the encoded RSS URL should be inserted, or leave at end to append automatically.</span>
+          </div>
+
+          <div class="form-row">
+            <label for="setting-max-articles">Max stored articles per feed</label>
+            <input type="number" id="setting-max-articles" min="10" max="500" step="10" value="100" />
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Preferences</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Tab 3: HTML5 Database -->
+      <section class="tab-panel" id="tab-panel-database" role="tabpanel" aria-labelledby="tab-btn-database">
+        <h3>HTML5 IndexedDB Storage</h3>
+        <p class="panel-desc">All subscriptions, cached articles, read states, and settings are stored locally inside your browser's IndexedDB database (<code>VulnpokalypseDB</code>).</p>
+
+        <div class="db-stats-grid">
+          <div class="db-stat-box">
+            <span class="stat-label">Database Engine</span>
+            <span class="stat-value mono">IndexedDB v3</span>
+          </div>
+          <div class="db-stat-box">
+            <span class="stat-label">Feeds Stored</span>
+            <span class="stat-value mono" id="db-stat-feeds">0</span>
+          </div>
+          <div class="db-stat-box">
+            <span class="stat-label">Articles Stored</span>
+            <span class="stat-value mono" id="db-stat-articles">0</span>
+          </div>
+          <div class="db-stat-box">
+            <span class="stat-label">Approx. Payload</span>
+            <span class="stat-value mono" id="db-stat-size">0 KB</span>
+          </div>
+        </div>
+
+        <div class="db-actions-group">
+          <div class="db-action-row">
+            <div>
+              <strong>Export Configuration</strong>
+              <p class="panel-desc">Download subscriptions and preferences as JSON.</p>
+            </div>
+            <button type="button" class="btn btn-subtle" id="btn-export-data">Export JSON</button>
+          </div>
+
+          <div class="db-action-row">
+            <div>
+              <strong>Clear Cached Articles</strong>
+              <p class="panel-desc">Removes all stored articles while keeping your RSS subscriptions.</p>
+            </div>
+            <button type="button" class="btn btn-danger" id="btn-clear-articles">Clear Articles</button>
+          </div>
+
+          <div class="db-action-row">
+            <div>
+              <strong>Restore Default Feeds</strong>
+              <p class="panel-desc">Re-adds Tenable, Cloudflare Zero Wire, and Wiz feeds if removed.</p>
+            </div>
+            <button type="button" class="btn btn-subtle" id="btn-restore-defaults">Restore Defaults</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <script src="js/db.js"></script>
+  <script src="js/rss.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
