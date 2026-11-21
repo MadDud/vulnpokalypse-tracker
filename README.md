@@ -4,6 +4,8 @@ Vulnpokalypse Tracker is a client-side vulnerability intelligence and security a
 
 ## Usage
 
+The app is hosted at https://maddud.github.io/vulnpokalypse-tracker
+
 - The application regularly pulls new articles from configured RSS feeds and puts them to the left panel.
 - User can add, remove and disable rss feeds.
 - User reviews new articles and marks interesting subjects by clicking "Focus" button. This moves the article to the right panel, and automatically enreaches the article based on cve numbers in the Label metadata, with Tenable Nessus plugins and looks up if any of the CVEs is exploitable. 

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Vulnpokalypse Tracker</title>
   <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" type="image/png" href="src/favicon.png" sizes="32x32" />
 </head>
 <body>
   <div class="app-shell">
@@ -423,6 +424,17 @@
       >
         HTML5 Database
       </button>
+      <button
+        type="button"
+        class="tab-btn"
+        role="tab"
+        id="tab-btn-about"
+        aria-selected="false"
+        aria-controls="tab-panel-about"
+        data-tab="about"
+      >
+        About
+      </button>
     </div>
 
     <div class="window-body">
@@ -561,6 +573,44 @@
               <p class="panel-desc">Re-adds Tenable, Cloudflare Zero Wire, and Wiz feeds if removed.</p>
             </div>
             <button type="button" class="btn btn-subtle" id="btn-restore-defaults">Restore Defaults</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 4: About -->
+      <section class="tab-panel" id="tab-panel-about" role="tabpanel" aria-labelledby="tab-btn-about">
+        <h3>Vulnpokalypse Tracker</h3>
+        <p class="panel-desc">Client-side vulnerability advisory aggregator powered by HTML5 IndexedDB.</p>
+
+        <div class="db-actions-group">
+          <div class="db-action-row">
+            <div>
+              <strong>Code</strong>
+              <p class="panel-desc mono">https://github.com/MadDud/vulnpokalypse-tracker</p>
+            </div>
+            <a
+              href="https://github.com/MadDud/vulnpokalypse-tracker"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-primary"
+            >
+              Open GitHub
+            </a>
+          </div>
+
+          <div class="db-action-row">
+            <div>
+              <strong>Hosted version</strong>
+              <p class="panel-desc mono">https://maddud.github.io/vulnpokalypse-tracker/</p>
+            </div>
+            <a
+              href="https://maddud.github.io/vulnpokalypse-tracker/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-primary"
+            >
+              Open Site
+            </a>
           </div>
         </div>
       </section>

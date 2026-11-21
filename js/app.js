@@ -310,6 +310,20 @@
     return `<span class="cve-pill${exploitedClass}"${titleAttr}>${escapeHtml(label)}</span>`;
   }
 
+  function renderSortedLabelPills(labels) {
+    if (!Array.isArray(labels) || labels.length === 0) return "";
+    const kevLabels = [];
+    const otherLabels = [];
+    for (const lbl of labels) {
+      if (isExploitedCve(lbl)) {
+        kevLabels.push(lbl);
+      } else {
+        otherLabels.push(lbl);
+      }
+    }
+    return [...kevLabels, ...otherLabels].map((lbl) => renderLabelPill(lbl, false)).join("");
+  }
+
   async function reloadFromDB() {
     const [feeds, articles, enrichmentItems, settings, events] = await Promise.all([
       VulnDB.getAllFeeds(),
@@ -516,17 +530,19 @@
       card.setAttribute("tabindex", "0");
       card.dataset.articleId = article.id;
 
-      const labelBadges =
-        article.labels && article.labels.length > 0
-          ? article.labels
-              .slice(0, 3)
-              .map((lbl) => renderLabelPill(lbl, false))
-              .join("")
-          : "";
+      const sortedLabelsHtml = renderSortedLabelPills(article.labels);
 
       const linkedBadgeHtml = article.linked
         ? `<span class="linked-badge" title="Auto-linked to a focused article">Linked</span>`
         : "";
+
+      const linkedCount = (article.linkedArticles || []).length;
+      const linkedBtnHtml =
+        linkedCount > 0
+          ? `<button type="button" class="focus-linked-btn" data-open-linked-id="${escapeHtml(
+              article.id
+            )}" title="${linkedCount} linked article${linkedCount === 1 ? "" : "s"}">${linkedCount} linked</button>`
+          : "";
 
       card.innerHTML = `
         <div class="article-card-meta">
@@ -545,13 +561,14 @@
             : ""
         }
         <div class="article-card-footer">
-          <div class="article-card-cves">${labelBadges}</div>
           <button
             type="button"
             class="btn-focus${article.focused ? " is-focused" : ""}"
             data-focus-id="${escapeHtml(article.id)}"
             title="${article.focused ? "Remove from Focus List" : "Add to Focus List"}"
-          >${article.focused ? "Focused" : "Focus"}</button>
+          >${article.focused ? "Unfocus" : "Focus"}</button>
+          ${linkedBtnHtml}
+          ${sortedLabelsHtml}
         </div>
       `;
 
@@ -561,9 +578,17 @@
         toggleFocusArticle(article.id);
       });
 
+      const linkedBtn = card.querySelector("[data-open-linked-id]");
+      if (linkedBtn) {
+        linkedBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openArticleDetails(article.id);
+        });
+      }
+
       card.addEventListener("click", () => openArticleDetails(article.id));
       card.addEventListener("keydown", (e) => {
-        if (e.target === focusBtn) return;
+        if (e.target === focusBtn || e.target === linkedBtn) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           openArticleDetails(article.id);
@@ -611,13 +636,7 @@
       card.setAttribute("role", "listitem");
       card.setAttribute("tabindex", "0");
 
-      const labelBadges =
-        article.labels && article.labels.length > 0
-          ? article.labels
-              .slice(0, 3)
-              .map((lbl) => renderLabelPill(lbl, false))
-              .join("")
-          : "";
+      const sortedLabelsHtml = renderSortedLabelPills(article.labels);
 
       const kevCves = getArticleKevCves(article);
       const kevIconHtml =
@@ -633,10 +652,50 @@
             </span>`
           : "";
 
-      const linkedCount = (article.linkedArticles || []).length;
+      const linkedArticlesAll = Array.isArray(article.linkedArticles)
+        ? article.linkedArticles
+        : [];
+      const linkedCount = linkedArticlesAll.length;
       const linkedCountHtml =
         linkedCount > 0
-          ? `<span class="focus-linked-count" title="${linkedCount} linked article${linkedCount === 1 ? "" : "s"}">${linkedCount} linked</span>`
+          ? `<button type="button" class="focus-linked-btn" data-open-linked-id="${escapeHtml(
+              article.id
+            )}" title="${linkedCount} linked article${linkedCount === 1 ? "" : "s"}">${linkedCount} linked</button>`
+          : "";
+
+      // Three most recently added linked articles, newest on top
+      const recentThreeLinks = [...linkedArticlesAll]
+        .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
+        .slice(0, 3);
+
+      const recentLinksHtml =
+        recentThreeLinks.length > 0
+          ? `<div class="focus-card-recent-links">${recentThreeLinks
+              .map((entry) => {
+                const live = state.articles.find((a) => a.id === entry.articleId);
+                const title = live ? live.title : entry.title || "(Untitled article)";
+                const link = live ? live.link : entry.link || "";
+                const addedLabel = formatRelativeTime(entry.addedAt);
+                return `
+                  <div class="focus-recent-link-row">
+                    <button
+                      type="button"
+                      class="focus-recent-link-btn"
+                      data-open-focus-linked-id="${escapeHtml(entry.articleId)}"
+                      title="${escapeHtml(title)}"
+                    >${escapeHtml(title)}</button>
+                    <span class="focus-recent-link-meta">
+                      <span>${escapeHtml(addedLabel)}</span>
+                      ${
+                        link
+                          ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" class="focus-recent-link-ext" title="Open external link">↗</a>`
+                          : ""
+                      }
+                    </span>
+                  </div>
+                `;
+              })
+              .join("")}</div>`
           : "";
 
       const newLinksHtml = hasNewLink
@@ -674,20 +733,19 @@
               ? `<p class="focus-card-excerpt">${escapeHtml(article.excerpt)}</p>`
               : ""
           }
+          ${recentLinksHtml}
         </div>
         <div class="focus-card-bottom">
-          <div class="focus-card-cves">${labelBadges}</div>
-          <div class="focus-card-actions">
-            ${linkedCountHtml}
-            <button
-              type="button"
-              class="btn btn-sm ${isConfirmingUnfocus ? "btn-unfocus-confirm" : "btn-subtle"}"
-              data-unfocus-id="${escapeHtml(article.id)}"
-              title="${isConfirmingUnfocus ? "Click again to confirm unfocus" : "Remove from Focus List"}"
-            >
-              ${isConfirmingUnfocus ? "Are you sure?" : "Unfocus"}
-            </button>
-          </div>
+          <button
+            type="button"
+            class="btn btn-sm ${isConfirmingUnfocus ? "btn-unfocus-confirm" : "btn-subtle"}"
+            data-unfocus-id="${escapeHtml(article.id)}"
+            title="${isConfirmingUnfocus ? "Click again to confirm unfocus" : "Remove from Focus List"}"
+          >
+            ${isConfirmingUnfocus ? "Are you sure?" : "Unfocus"}
+          </button>
+          ${linkedCountHtml}
+          ${sortedLabelsHtml}
         </div>
       `;
 
@@ -703,9 +761,30 @@
         handleFocusCardUnfocusClick(article.id);
       });
 
+      const linkedBtn = card.querySelector("[data-open-linked-id]");
+      if (linkedBtn) {
+        linkedBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openArticleDetails(article.id);
+        });
+      }
+
+      card.querySelectorAll("[data-open-focus-linked-id]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openArticleDetails(article.id, btn.dataset.openFocusLinkedId);
+        });
+      });
+
+      card.querySelectorAll(".focus-recent-link-ext").forEach((anchor) => {
+        anchor.addEventListener("click", (e) => {
+          e.stopPropagation();
+        });
+      });
+
       card.addEventListener("click", () => openArticleDetails(article.id));
       card.addEventListener("keydown", (e) => {
-        if (e.target === unfocusBtn || e.target === starBtn) return;
+        if (e.target.closest("button, a")) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           openArticleDetails(article.id);
@@ -1205,10 +1284,10 @@
     return state.articles.find((a) => a.id === targetId) || null;
   }
 
-  async function openArticleDetails(articleId) {
+  async function openArticleDetails(articleId, initialLinkedArticleId = null) {
     state.selectedArticleId = articleId;
-    state.viewingLinkedArticleId = null;
-    state.viewingLinkedKind = null;
+    state.viewingLinkedArticleId = initialLinkedArticleId || null;
+    state.viewingLinkedKind = initialLinkedArticleId ? "article" : null;
     state.linkedFilterMode = "all";
     state.isEditingTitle = false;
     state.isEditingNotes = false;
