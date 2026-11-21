@@ -32,7 +32,7 @@ const VulnDB = (() => {
     },
     {
       name: "Tenable Nessus Plugins",
-      url: "https://www.tenable.com/blog/cyber-exposure-alerts/feed",
+      url: "https://www.tenable.com/plugins/feeds?sort=newest",
       feedType: "enrichment",
       enrichmentSource: "nessus",
       enabled: true,
